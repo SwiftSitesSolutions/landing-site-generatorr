@@ -1,49 +1,70 @@
-const express = require("express");
-const puppeteer = require("puppeteer");
-const bodyParser = require("body-parser");
-require("dotenv").config();
-
+const express = require('express');
+const puppeteer = require('puppeteer');
 const app = express();
-app.use(bodyParser.json());
+const port = process.env.PORT || 3000;
 
-app.post("/", async (req, res) => {
-  const { businessName, industry } = req.body;
+// Middleware to parse JSON bodies
+app.use(express.json());
 
-  const browser = await puppeteer.launch({
-    headless: "new",
-    args: ["--no-sandbox", "--disable-setuid-sandbox"],
-  });
-
-  const page = await browser.newPage();
-
+// POST endpoint to handle automation
+app.post('/', async (req, res) => {
+  let browser;
   try {
-    // STEP 1: Go to login page
-    await page.goto("https://www.landingsite.ai/login", { waitUntil: "networkidle2" });
+    // Launch Puppeteer with Railway-compatible settings
+    browser = await puppeteer.launch({
+      headless: true,
+      args: ['--no-sandbox', '--disable-setuid-sandbox'],
+      ignoreDefaultArgs: ['--disable-extensions']
+    });
+    const page = await browser.newPage();
 
-    // STEP 2: Fill in login form
-    await page.type('input[type="email"]', process.env.LANDING_EMAIL, { delay: 100 });
-    await page.type('input[type="password"]', process.env.LANDING_PASSWORD, { delay: 100 });
+    // Navigate to login page
+    await page.goto('https://www.landingsite.ai/login', {
+      waitUntil: 'networkidle2'
+    });
 
-    // STEP 3: Submit login form
-    await Promise.all([
-      page.click('button[type="submit"]'),
-      page.waitForNavigation({ waitUntil: "networkidle2" }),
-    ]);
+    // Log in using environment variables
+    await page.type('input[name="email"]', process.env.LANDINGSITE_EMAIL);
+    await page.type('input[name="password"]', process.env.LANDINGSITE_PASSWORD);
+    await page.click('button[type="submit"]');
 
-    console.log("✅ Logged in to LandingSite.ai");
+    // Wait for navigation after login
+    await page.waitForNavigation({ waitUntil: 'networkidle2' });
 
-    // TEMP: Just return success message for now
-    await browser.close();
-    res.json({ success: true, message: "Login successful (filling page next)" });
+    // Step 1: Fill business description from POST request body
+    const { businessDescription } = req.body;
+    if (!businessDescription) {
+      throw new Error('Business description is required in POST body');
+    }
+    await page.waitForSelector('textarea[name="description"]');
+    await page.type('textarea[name="description"]', businessDescription);
 
+    // Step 2: Select a template (assuming a dropdown or clickable template cards)
+    // Adjust selector based on actual LandingSite.ai template selection UI
+    await page.waitForSelector('.template-card'); // Example selector
+    await page.click('.template-card:nth-child(1)'); // Select first template
+
+    // Click Continue/Generate button
+    await page.waitForSelector('button#generate-button'); // Adjust ID as needed
+    await page.click('button#generate-button');
+
+    // Wait for preview link to appear (adjust selector based on actual UI)
+    await page.waitForSelector('a.preview-link', { timeout: 60000 });
+    const previewUrl = await page.$eval('a.preview-link', el => el.href);
+
+    // Return JSON response
+    res.json({ previewUrl });
   } catch (error) {
-    console.error("❌ Error during Puppeteer script:", error);
-    await browser.close();
-    res.status(500).json({ success: false, error: error.message });
+    console.error('Automation error:', error);
+    res.status(500).json({ error: error.message });
+  } finally {
+    if (browser) {
+      await browser.close();
+    }
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
+// Start the server
+app.listen(port, () => {
+  console.log(`Server running on port ${port}`);
 });
