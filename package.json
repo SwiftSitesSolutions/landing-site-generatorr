@@ -1,15 +1,13 @@
 {
-  "name": "landing-site-generator",
+  "name": "landing-site-generatorr",
   "version": "1.0.0",
-  "description": "Automates LandingSite.ai site generation using Puppeteer",
+  "description": "Generate landing sites via Puppeteer",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
-    "puppeteer": "^21.3.8",
     "express": "^4.18.2",
-    "body-parser": "^1.20.2",
-    "cors": "^2.8.5"
+    "puppeteer": "^21.3.8"
   }
 }
