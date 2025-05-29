@@ -1,45 +1,49 @@
 const express = require("express");
 const puppeteer = require("puppeteer");
 const bodyParser = require("body-parser");
+require("dotenv").config();
 
 const app = express();
 app.use(bodyParser.json());
 
-app.post("/generate", async (req, res) => {
+app.post("/", async (req, res) => {
   const { businessName, industry } = req.body;
-  const prompt = `Create a modern landing page for a ${industry} business named "${businessName}" using GPT.`;
+
+  const browser = await puppeteer.launch({
+    headless: "new",
+    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+  });
+
+  const page = await browser.newPage();
 
   try {
-    const browser = await puppeteer.launch({
-      headless: "new",
-      args: ["--no-sandbox", "--disable-setuid-sandbox"],
-    });
+    // STEP 1: Go to login page
+    await page.goto("https://www.landingsite.ai/login", { waitUntil: "networkidle2" });
 
-    const page = await browser.newPage();
-    await page.goto("https://www.landingsite.ai/", { waitUntil: "networkidle0" });
+    // STEP 2: Fill in login form
+    await page.type('input[type="email"]', process.env.LANDING_EMAIL, { delay: 100 });
+    await page.type('input[type="password"]', process.env.LANDING_PASSWORD, { delay: 100 });
 
-    await page.waitForSelector("textarea");
-    await page.type("textarea", prompt);
+    // STEP 3: Submit login form
+    await Promise.all([
+      page.click('button[type="submit"]'),
+      page.waitForNavigation({ waitUntil: "networkidle2" }),
+    ]);
 
-    await page.click("button[type='submit']");
-    await page.waitForSelector("iframe", { timeout: 60000 });
+    console.log("✅ Logged in to LandingSite.ai");
 
-    const previewUrl = await page.evaluate(() => {
-      const iframe = document.querySelector("iframe");
-      return iframe ? iframe.src : null;
-    });
-
+    // TEMP: Just return success message for now
     await browser.close();
+    res.json({ success: true, message: "Login successful (filling page next)" });
 
-    if (previewUrl) {
-      res.json({ previewUrl });
-    } else {
-      res.status(500).json({ error: "Preview URL not found." });
-    }
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    console.error("❌ Error during Puppeteer script:", error);
+    await browser.close();
+    res.status(500).json({ success: false, error: error.message });
   }
 });
 
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+app.listen(PORT, () => {
+  console.log(`🚀 Server running on port ${PORT}`);
+});
